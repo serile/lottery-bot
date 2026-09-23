@@ -1,5 +1,8 @@
 import requests
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Notification:
     def send_lotto_buying_message(self, body: dict, webhook_url: str) -> None:
@@ -141,5 +144,11 @@ class Notification:
             print(f"[Info] Webhook URL not found. Message: {message}")
             return
         
-        payload = { "content": message }
-        requests.post(webhook_url, json=payload)
+        payload = {"content": message}
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException as error:
+            # Do not make a completed purchase look like a failed job merely because
+            # its notification service is unavailable. Retrying a job could buy twice.
+            logger.error("Discord 알림 전송에 실패했습니다: %s", error)

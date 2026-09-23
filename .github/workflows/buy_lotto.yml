@@ -4,24 +4,34 @@ on:
     - cron: 0 10 * * 1 # every Monday on 07:00 PM (KST)
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: lottery-bot-purchase
+  cancel-in-progress: false
+
 jobs:
   build:
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
     name: Buy lotto
+    timeout-minutes: 10
     steps:  
 
-      - uses: actions/checkout@v3    
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.12'
           cache: 'pip' # caching pip dependencies
-      - run: pip install -r requirements.txt
+      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
       
       - name: Run Scripts
         run: make buy # or use 'make buy_lotto' / 'make buy_win720' for granular purchase
         env:
           USERNAME: ${{ secrets.USERNAME }}
           PASSWORD: ${{ secrets.PASSWORD }}
-          COUNT: ${{ secrets.COUNT }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          DISCORD_WEBHOOK_URL:  ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          LOTTO645_COUNT: ${{ vars.LOTTO645_COUNT || '1' }}
+          BUY_LOTTO645: ${{ vars.BUY_LOTTO645 || 'true' }}
+          BUY_WIN720: ${{ vars.BUY_WIN720 || 'false' }}
+          MAX_WEEKLY_SPEND: ${{ vars.MAX_WEEKLY_SPEND || '1000' }}
