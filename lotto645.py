@@ -49,7 +49,8 @@ class Lotto645:
         self, 
         auth_ctrl: auth.AuthController, 
         cnt: int, 
-        mode: Lotto645Mode
+        mode: Lotto645Mode,
+        requirements: list | None = None,
     ) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
         assert isinstance(cnt, int) and 1 <= cnt <= 5
@@ -57,7 +58,7 @@ class Lotto645:
 
         headers = self._generate_req_headers(auth_ctrl)
         
-        requirements = self._getRequirements(headers)
+        requirements = requirements or self._getRequirements(headers)
         
         data = (
             self._generate_body_for_auto_mode(cnt, requirements)
@@ -69,6 +70,55 @@ class Lotto645:
 
         self._show_result(body)
         return body
+
+    def get_purchase_requirements(self, auth_ctrl: auth.AuthController) -> list:
+        """Return the current sale metadata, including the target draw round."""
+        return self._getRequirements(self._generate_req_headers(auth_ctrl))
+
+    def get_latest_drawn_round(self) -> str | None:
+        """Return the latest completed Lotto 6/45 draw number when available."""
+        try:
+            response = self.http_client.get(
+                "https://www.dhlottery.co.kr/common.do?method=main",
+                headers=self._REQ_HEADERS,
+            )
+            soup = BS(response.text, "html5lib")
+            draw = soup.find("strong", id="lottoDrwNo")
+            return draw.text.strip() if draw else None
+        except requests.RequestException as error:
+            logger.warning("[Warning] 최신 로또 회차를 확인하지 못했습니다: %s", error)
+            return None
+
+    def find_ticket_for_round(self, auth_ctrl: auth.AuthController, round_no: str) -> dict | None:
+        """Return an existing Lotto 6/45 ticket for ``round_no``, if one exists.
+
+        This is deliberately checked before every automated purchase. A scheduled
+        run that is delayed or repeated must verify the authoritative purchase
+        ledger before it sends another purchase request.
+        """
+        headers = self._generate_req_headers(auth_ctrl)
+        headers["Referer"] = "https://www.dhlottery.co.kr/mypage/mylotteryledger"
+        headers.pop("Content-Type", None)
+        headers.pop("Origin", None)
+
+        parameters = common.get_search_date_range()
+        response = self.http_client.get(
+            "https://www.dhlottery.co.kr/mypage/selectMyLotteryledger.do",
+            params={
+                "srchStrDt": parameters["searchStartDate"],
+                "srchEndDt": parameters["searchEndDate"],
+                "ltGdsCd": "LO40",
+                "pageNum": 1,
+                "recordCountPerPage": 50,
+            },
+            headers=headers,
+        )
+        payload = response.json().get("data", {})
+        for item in payload.get("list", []):
+            item_round = str(item.get("ltEpsd") or item.get("ltEpsdView", "")).replace("회", "").strip()
+            if item_round == str(round_no):
+                return item
+        return None
 
     def _generate_req_headers(self, auth_ctrl: auth.AuthController) -> dict:
         assert isinstance(auth_ctrl, auth.AuthController)
@@ -204,23 +254,15 @@ class Lotto645:
 
         headers["Content-Type"]  = "application/x-www-form-urlencoded; charset=UTF-8"
 
-        max_retries = 5
-        for attempt in range(max_retries):
-            try:
-                res = self.http_client.post(
-                    "https://ol.dhlottery.co.kr/olotto/game/execBuy.do",
-                    headers=headers,
-                    data=data,
-                )
-                res.raise_for_status()
-                break
-            except requests.RequestException as e:
-                if attempt < max_retries - 1:
-                    logger.warning(f"[Retry] execBuy connection failed ({attempt+1}/{max_retries}): {e}. Retrying in 2s...")
-                    time.sleep(2)
-                else:
-                    logger.error(f"[Error] execBuy connection failed after {max_retries} attempts: {e}")
-                    raise
+        # Do not retry a purchase POST. If the response is lost after Donghaeng
+        # processes the request, retrying here can purchase a second ticket. The
+        # next scheduled run checks the purchase ledger before it attempts again.
+        res = self.http_client.post(
+            "https://ol.dhlottery.co.kr/olotto/game/execBuy.do",
+            headers=headers,
+            data=data,
+        )
+        res.raise_for_status()
         if res.encoding == 'ISO-8859-1':
              res.encoding = 'euc-kr'
         

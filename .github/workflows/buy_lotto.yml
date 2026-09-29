@@ -1,11 +1,18 @@
 name: Buy lotto
 on:
   schedule:
-    - cron: 0 10 * * 4 # every Thursday on 07:00 PM (KST)
+    # Primary window: Thursday 18:45~19:57 KST, avoiding the top of the UTC hour.
+    - cron: '45,50,55 9 * * 4'
+    - cron: '2-57/5 10 * * 4'
+    # Backup checks before the Saturday sales deadline, in case every Thursday run was missed.
+    - cron: '17 0 * * 5'
+    - cron: '47 9 * * 5'
+    - cron: '17 0 * * 6'
+    - cron: '47 9 * * 6'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: lottery-bot-purchase
@@ -24,6 +31,13 @@ jobs:
           python-version: '3.12'
           cache: 'pip' # caching pip dependencies
       - run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Checkout bot state
+        uses: actions/checkout@v5
+        with:
+          ref: bot-state
+          path: .bot-state
+          fetch-depth: 0
       
       - name: Run Scripts
         run: make buy # or use 'make buy_lotto' / 'make buy_win720' for granular purchase
@@ -35,3 +49,28 @@ jobs:
           BUY_LOTTO645: ${{ vars.BUY_LOTTO645 || 'true' }}
           BUY_WIN720: ${{ vars.BUY_WIN720 || 'false' }}
           MAX_WEEKLY_SPEND: ${{ vars.MAX_WEEKLY_SPEND || '1000' }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          LOTTERY_STATE_DIR: .bot-state/.lottery-bot
+
+      - name: Commit bot state
+        if: always()
+        working-directory: .bot-state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .lottery-bot
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: record lottery bot state"
+          git pull --rebase origin bot-state
+          git push origin HEAD:bot-state
+
+      - name: Notify purchase confirmation failure
+        if: failure()
+        run: >-
+          python -c "import os; from notification import Notification;
+          Notification()._send_discord_webhook(os.environ.get('DISCORD_WEBHOOK_URL', ''),
+          '⚠️ 로또 자동 구매 확인에 실패했습니다. 구매 여부를 동행복권에서 확인하고 GitHub Actions 로그를 확인하세요.')"
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

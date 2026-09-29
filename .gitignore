@@ -166,4 +166,5 @@ cython_debug/
 #.idea/
 
 .DS_Store
+.bot-state/
 # End of https://www.toptal.com/developers/gitignore/api/python
