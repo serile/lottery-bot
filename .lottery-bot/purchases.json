@@ -1,4 +1,10 @@
 {
-  "rounds": {},
-  "updated_at": null
+  "rounds": {
+    "1244": {
+      "recorded_at": "2026-10-02T05:37:21.272332+00:00",
+      "source": "lottery_ledger",
+      "status": "confirmed"
+    }
+  },
+  "updated_at": "2026-10-02T05:37:21.272332+00:00"
 }
