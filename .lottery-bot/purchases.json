@@ -29,7 +29,12 @@
       "recorded_at": "2026-11-07T05:57:29.810263+00:00",
       "source": "lottery_ledger",
       "status": "confirmed"
+    },
+    "1250": {
+      "recorded_at": "2026-11-13T06:44:47.129384+00:00",
+      "source": "lottery_ledger",
+      "status": "confirmed"
     }
   },
-  "updated_at": "2026-11-07T05:57:29.810263+00:00"
+  "updated_at": "2026-11-13T06:44:47.129384+00:00"
 }
